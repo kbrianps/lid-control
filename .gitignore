@@ -1,0 +1,11 @@
+# Build artifacts
+*.deb
+lid-control_*/
+laptop-lid-control_*/
+
+# Editor / OS
+*.swp
+*~
+.DS_Store
+.vscode/
+.idea/

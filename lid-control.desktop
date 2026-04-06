@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Laptop Lid Control
+Comment=Configure what happens when the laptop lid is closed
+Exec=/usr/local/bin/lid-control.sh
+Icon=battery
+Terminal=false
+Type=Application
+Categories=System;Settings;
+Keywords=lid;suspend;power;laptop;sleep;
