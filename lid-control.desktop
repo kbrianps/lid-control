@@ -2,8 +2,9 @@
 Name=Lid Control
 Comment=Configure what happens when the laptop lid is closed
 Exec=/usr/bin/lid-control
-Icon=battery
+Icon=lid-control
 Terminal=false
 Type=Application
 Categories=System;Settings;
 Keywords=lid;suspend;power;laptop;sleep;
+StartupWMClass=lid-control

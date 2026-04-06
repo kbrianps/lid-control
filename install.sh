@@ -13,6 +13,7 @@ NEEDED=()
 command -v zenity >/dev/null 2>&1 || NEEDED+=("zenity")
 command -v pkexec >/dev/null 2>&1 || NEEDED+=("policykit-1")
 command -v systemctl >/dev/null 2>&1 || NEEDED+=("systemd")
+command -v xdotool >/dev/null 2>&1 || NEEDED+=("xdotool")
 
 if [ ${#NEEDED[@]} -gt 0 ]; then
     echo "Installing missing dependencies: ${NEEDED[*]}"

@@ -18,8 +18,28 @@ CURRENT=$(get_current)
 
 is() { [ "$CURRENT" = "$1" ] && echo TRUE || echo FALSE; }
 
+ICON=/usr/share/icons/hicolor/scalable/apps/lid-control.svg
+[ -f "$ICON" ] || ICON=lid-control
+
+# Rebrand the zenity window so the dock can match it to lid-control.desktop
+# (zenity sets WM_CLASS=zenity by default, so without this the dock falls
+# back to a generic icon instead of using ours).
+fix_wmclass() {
+    command -v xdotool >/dev/null 2>&1 || return
+    local title="$1" wid=""
+    for _ in $(seq 1 20); do
+        wid=$(xdotool search --name "^${title}$" 2>/dev/null | head -1)
+        [ -n "$wid" ] && break
+        sleep 0.1
+    done
+    [ -n "$wid" ] && xdotool set_window --class lid-control --classname lid-control "$wid" 2>/dev/null
+}
+
+fix_wmclass "Lid Control" &
+
 CHOICE=$(zenity --list \
-    --title="Laptop Lid Control" \
+    --title="Lid Control" \
+    --window-icon="$ICON" \
     --text="What to do when the <b>lid is closed</b>?\n" \
     --radiolist \
     --column="" --column="Action" --column="Description" \
@@ -35,19 +55,10 @@ CHOICE=$(zenity --list \
 
 pkexec bash -c "
     mkdir -p '$CONF_DIR'
-    printf '[Login]\nHandleLidSwitch=$CHOICE\n' > '$CONF_FILE'
-    systemctl restart systemd-logind
+    printf '[Login]\nHandleLidSwitch=$CHOICE\nHandleLidSwitchExternalPower=$CHOICE\nHandleLidSwitchDocked=$CHOICE\n' > '$CONF_FILE'
+    systemctl reload systemd-logind
 "
 
-if [ $? -eq 0 ]; then
-    case "$CHOICE" in
-        suspend)   MSG="Lid set to: Suspend" ;;
-        ignore)    MSG="Lid set to: Do nothing" ;;
-        lock)      MSG="Lid set to: Lock screen" ;;
-        poweroff)  MSG="Lid set to: Power off" ;;
-        hibernate) MSG="Lid set to: Hibernate" ;;
-    esac
-    zenity --info --title="Settings saved" --text="✅ $MSG\n\nThe new setting is already active." --width=300 2>/dev/null
-else
-    zenity --error --title="Error" --text="❌ Could not apply the setting.\nMake sure you have administrator privileges." --width=300 2>/dev/null
+if [ $? -ne 0 ]; then
+    zenity --error --title="Error" --window-icon="$ICON" --text="❌ Could not apply the setting.\nMake sure you have administrator privileges." --width=300 2>/dev/null
 fi

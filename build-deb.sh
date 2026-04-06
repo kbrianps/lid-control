@@ -6,7 +6,7 @@
 set -e
 
 PKG_NAME="lid-control"
-PKG_VERSION="1.0.2"
+PKG_VERSION="1.0.5"
 PKG_ARCH="all"
 PKG_DIR="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}"
 
@@ -31,10 +31,7 @@ mkdir -p "$PKG_DIR/usr/share/doc/$PKG_NAME"
 
 install -Dm755 lid-control.sh       "$PKG_DIR/usr/bin/lid-control"
 install -Dm644 lid-control.desktop  "$PKG_DIR/usr/share/applications/lid-control.desktop"
-
-# Patch desktop Exec to point at the packaged binary path
-sed -i 's|^Exec=.*|Exec=/usr/bin/lid-control|' \
-    "$PKG_DIR/usr/share/applications/lid-control.desktop"
+install -Dm644 lid-control.svg      "$PKG_DIR/usr/share/icons/hicolor/scalable/apps/lid-control.svg"
 
 # --- Control file ----------------------------------------------------------
 cat > "$PKG_DIR/DEBIAN/control" <<EOF
@@ -43,7 +40,7 @@ Version: $PKG_VERSION
 Section: utils
 Priority: optional
 Architecture: $PKG_ARCH
-Depends: zenity, policykit-1, systemd
+Depends: zenity, policykit-1, systemd, xdotool
 Maintainer: kbrianps <kbrianps@localhost>
 Description: Laptop Lid Control
  Graphical tool to configure what happens when the laptop lid is closed
@@ -58,6 +55,9 @@ set -e
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q /usr/share/applications || true
 fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t /usr/share/icons/hicolor || true
+fi
 exit 0
 EOF
 chmod 755 "$PKG_DIR/DEBIAN/postinst"
@@ -67,6 +67,9 @@ cat > "$PKG_DIR/DEBIAN/postrm" <<'EOF'
 set -e
 if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q /usr/share/applications || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t /usr/share/icons/hicolor || true
 fi
 exit 0
 EOF

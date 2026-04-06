@@ -14,6 +14,7 @@ choice is written to `/etc/systemd/logind.conf.d/lid-control.conf` and
 - `systemd` (for `systemd-logind`)
 - `zenity` (GUI dialog)
 - `policykit-1` (provides `pkexec` for the privileged write)
+- `xdotool` (rebrands the dialog window so the dock shows the right icon)
 
 The installer and the `.deb` package both pull these in automatically.
 
@@ -25,7 +26,7 @@ Download the latest `.deb` from the
 [Releases page](../../releases) and install:
 
 ```bash
-sudo apt install ./lid-control_1.0.2_all.deb
+sudo apt install ./lid-control_1.0.5_all.deb
 ```
 
 `apt` will resolve and install the dependencies for you.
@@ -52,13 +53,25 @@ lid-control
 Pick the action and confirm with your password (the privileged write
 goes through `pkexec`).
 
+The chosen action is applied to **all three lid scenarios** that
+`systemd-logind` distinguishes:
+
+- `HandleLidSwitch` — on battery
+- `HandleLidSwitchExternalPower` — plugged into AC power
+- `HandleLidSwitchDocked` — connected to a dock or external monitor
+
+This is intentional: most people expect "close the lid → suspend" to
+behave the same way regardless of whether the laptop is on battery or
+plugged in. If you need different behaviors per scenario, edit
+`/etc/systemd/logind.conf.d/lid-control.conf` by hand.
+
 ## Building the .deb yourself
 
 ```bash
 ./build-deb.sh
 ```
 
-Produces `lid-control_1.0.2_all.deb` in the current directory.
+Produces `lid-control_1.0.5_all.deb` in the current directory.
 
 ## License
 
