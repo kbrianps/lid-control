@@ -25,7 +25,7 @@ Download the latest `.deb` from the
 [Releases page](../../releases) and install:
 
 ```bash
-sudo apt install ./lid-control_1.0.1_all.deb
+sudo apt install ./lid-control_1.0.2_all.deb
 ```
 
 `apt` will resolve and install the dependencies for you.
@@ -58,7 +58,7 @@ goes through `pkexec`).
 ./build-deb.sh
 ```
 
-Produces `lid-control_1.0.1_all.deb` in the current directory.
+Produces `lid-control_1.0.2_all.deb` in the current directory.
 
 ## License
 

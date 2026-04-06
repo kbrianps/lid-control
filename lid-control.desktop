@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=Laptop Lid Control
+Name=Lid Control
 Comment=Configure what happens when the laptop lid is closed
-Exec=/usr/local/bin/lid-control.sh
+Exec=/usr/bin/lid-control
 Icon=battery
 Terminal=false
 Type=Application

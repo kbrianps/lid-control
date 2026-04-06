@@ -6,7 +6,7 @@
 set -e
 
 PKG_NAME="lid-control"
-PKG_VERSION="1.0.1"
+PKG_VERSION="1.0.2"
 PKG_ARCH="all"
 PKG_DIR="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}"
 
