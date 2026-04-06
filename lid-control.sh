@@ -16,24 +16,14 @@ get_current() {
 
 CURRENT=$(get_current)
 
-case "$CURRENT" in
-    suspend)   CURRENT_LABEL="Suspend (current)" ;;
-    ignore)    CURRENT_LABEL="Do nothing (current)" ;;
-    lock)      CURRENT_LABEL="Lock screen (current)" ;;
-    poweroff)  CURRENT_LABEL="Power off (current)" ;;
-    hibernate) CURRENT_LABEL="Hibernate (current)" ;;
-    unknown)   CURRENT_LABEL="Unknown (system default)" ;;
-    *)         CURRENT_LABEL="$CURRENT (current)" ;;
-esac
-
 is() { [ "$CURRENT" = "$1" ] && echo TRUE || echo FALSE; }
 
 CHOICE=$(zenity --list \
     --title="Laptop Lid Control" \
-    --text="What to do when the <b>lid is closed</b>?\n\nCurrent setting: <b>$CURRENT_LABEL</b>" \
+    --text="What to do when the <b>lid is closed</b>?\n" \
     --radiolist \
     --column="" --column="Action" --column="Description" \
-    --width=480 --height=340 \
+    --width=520 --height=440 \
     $(is suspend)   "suspend"   "Suspend the system (saves battery)" \
     $(is ignore)    "ignore"    "Do nothing (keeps running)" \
     $(is lock)      "lock"      "Lock the screen" \
