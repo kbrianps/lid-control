@@ -56,6 +56,23 @@ sudo install -Dm755 lid-control-apply               /usr/libexec/lid-control-app
 sudo install -Dm644 lid-control.desktop             /usr/share/applications/lid-control.desktop
 sudo install -Dm644 org.kbrianps.lid-control.policy /usr/share/polkit-1/actions/org.kbrianps.lid-control.policy
 
+# Compile and install translation catalogs (needs gettext's msgfmt)
+if ! command -v msgfmt >/dev/null 2>&1; then
+    if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get install -y gettext
+    elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y gettext
+    elif command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --noconfirm gettext
+    fi
+fi
+for po in po/*.po; do
+    [ -f "$po" ] || continue
+    lang=$(basename "$po" .po)
+    sudo mkdir -p "/usr/share/locale/$lang/LC_MESSAGES"
+    sudo msgfmt "$po" -o "/usr/share/locale/$lang/LC_MESSAGES/lid-control.mo"
+done
+
 # Generate hicolor PNG sizes from the master lid-control.png. Needs PIL.
 if ! python3 -c "from PIL import Image" >/dev/null 2>&1; then
     if command -v apt-get >/dev/null 2>&1; then

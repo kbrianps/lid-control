@@ -1,10 +1,16 @@
 [Desktop Entry]
 Name=Lid Control
+Name[pt]=Controle da Tampa
+Name[pt_BR]=Controle da Tampa
 Comment=Configure what happens when the laptop lid is closed
+Comment[pt]=Configure o que acontece quando a tampa do notebook é fechada
+Comment[pt_BR]=Configure o que acontece quando a tampa do notebook é fechada
 Exec=/usr/bin/lid-control
 Icon=lid-control
 Terminal=false
 Type=Application
 Categories=System;Settings;
 Keywords=lid;suspend;power;laptop;sleep;
+Keywords[pt]=tampa;suspender;energia;notebook;dormir;
+Keywords[pt_BR]=tampa;suspender;energia;notebook;dormir;
 StartupWMClass=lid-control

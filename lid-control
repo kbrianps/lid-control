@@ -1,42 +1,163 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """
 Lid Control - configure systemd-logind HandleLidSwitch* via a GTK3 dialog.
 
 Writes /etc/systemd/logind.conf.d/lid-control.conf and reloads logind.
 """
 
+import configparser
+import gettext
+import locale
 import os
 import subprocess
+from pathlib import Path
 
 import gi
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
+from gi.repository import Gtk, GdkPixbuf
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+APP_NAME = "Lid Control"
+APP_ID = "lid-control"
+APP_VERSION = "1.3.0"
+APP_WEBSITE = "https://github.com/kbrianps/lid-control"
 
 CONF_DIR = "/etc/systemd/logind.conf.d"
 CONF_FILE = f"{CONF_DIR}/lid-control.conf"
 ICON_PATH = "/usr/share/icons/hicolor/256x256/apps/lid-control.png"
 HELPER_PATH = "/usr/libexec/lid-control-apply"
 
-ACTIONS = [
-    ("suspend",   "Suspend"),
-    ("ignore",    "Do nothing"),
-    ("lock",      "Lock screen"),
-    ("poweroff",  "Power off"),
-    ("hibernate", "Hibernate"),
+USER_CONFIG_DIR = Path.home() / ".config" / APP_ID
+USER_CONFIG_FILE = USER_CONFIG_DIR / "config.ini"
+
+# Where to look for compiled .mo files. The first one that exists wins.
+LOCALE_DIRS = [
+    "/usr/share/locale",
+    "/usr/local/share/locale",
+    str(Path(__file__).resolve().parent / "locale"),  # dev mode (uninstalled)
 ]
 
-SCENARIOS = [
-    ("HandleLidSwitch",              "On battery"),
-    ("HandleLidSwitchExternalPower", "Plugged in (AC power)"),
-    ("HandleLidSwitchDocked",        "Docked (external monitor or dock)"),
+# Languages the app ships translations for. "auto" means follow $LANG.
+SUPPORTED_LANGS = [
+    ("auto", "System default"),
+    ("en",   "English"),
+    ("pt",   "Português"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# i18n bootstrap (gettext)
+# ---------------------------------------------------------------------------
+
+def _read_user_lang() -> str:
+    """Return the language code stored in ~/.config/lid-control/config.ini,
+    or 'auto' if no override is set."""
+    try:
+        cp = configparser.ConfigParser()
+        cp.read(USER_CONFIG_FILE)
+        return cp.get("ui", "language", fallback="auto").strip() or "auto"
+    except Exception:
+        return "auto"
+
+
+def _write_user_lang(lang: str) -> None:
+    USER_CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    cp = configparser.ConfigParser()
+    if USER_CONFIG_FILE.exists():
+        try:
+            cp.read(USER_CONFIG_FILE)
+        except Exception:
+            pass
+    if "ui" not in cp:
+        cp["ui"] = {}
+    cp["ui"]["language"] = lang
+    with open(USER_CONFIG_FILE, "w") as fp:
+        cp.write(fp)
+
+
+def _resolved_locale_dir() -> str:
+    for d in LOCALE_DIRS:
+        if os.path.isdir(d):
+            return d
+    return LOCALE_DIRS[0]
+
+
+def _install_translation(lang_code: str) -> None:
+    """Install gettext _ as a builtin for the chosen language.
+
+    lang_code can be 'auto' (follow $LANG), 'en', 'pt', etc. PT translations
+    cover all pt_* variants automatically because gettext does the
+    pt_BR -> pt fallback for us.
+    """
+    languages = None
+    if lang_code and lang_code != "auto":
+        languages = [lang_code]
+
+    try:
+        t = gettext.translation(
+            APP_ID,
+            localedir=_resolved_locale_dir(),
+            languages=languages,
+            fallback=True,
+        )
+        t.install()
+    except Exception:
+        gettext.install(APP_ID, _resolved_locale_dir())
+
+    # Make sure LC_TIME etc. follow the same locale as far as possible
+    try:
+        if lang_code and lang_code != "auto":
+            locale.setlocale(locale.LC_ALL, "")
+    except Exception:
+        pass
+
+
+_install_translation(_read_user_lang())
+
+# Some places (PyGObject lambdas, About dialog, etc.) want a stable name
+# for the translator function. Use _ as installed by gettext.
+try:
+    _ = _   # noqa: F821 - installed by gettext.install
+except NameError:
+    _ = lambda s: s  # noqa: E731
+
+
+# ---------------------------------------------------------------------------
+# Action / scenario tables
+# ---------------------------------------------------------------------------
+
+def actions():
+    return [
+        ("suspend",   _("Suspend")),
+        ("ignore",    _("Do nothing")),
+        ("lock",      _("Lock screen")),
+        ("poweroff",  _("Power off")),
+        ("hibernate", _("Hibernate")),
+    ]
+
+
+def scenarios():
+    return [
+        ("HandleLidSwitch",              _("On battery")),
+        ("HandleLidSwitchExternalPower", _("Plugged in (AC power)")),
+        ("HandleLidSwitchDocked",        _("Docked (external monitor or dock)")),
+    ]
+
 
 DEFAULT_ACTION = "suspend"
 
 
+# ---------------------------------------------------------------------------
+# Read current logind config
+# ---------------------------------------------------------------------------
+
 def read_current():
     """Return {key: action} for the three HandleLidSwitch* keys, merged."""
-    values = {key: DEFAULT_ACTION for key, _ in SCENARIOS}
+    keys = [k for k, _l in scenarios()]
+    values = {key: DEFAULT_ACTION for key in keys}
     try:
         out = subprocess.check_output(
             ["systemd-analyze", "cat-config", "systemd/logind.conf"],
@@ -49,7 +170,7 @@ def read_current():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
-        key, _, val = line.partition("=")
+        key, _eq, val = line.partition("=")
         key = key.strip()
         val = val.strip()
         if key in values and val:
@@ -57,17 +178,19 @@ def read_current():
     return values
 
 
+# ---------------------------------------------------------------------------
+# Main window
+# ---------------------------------------------------------------------------
+
 class LidControlWindow(Gtk.Window):
     def __init__(self):
-        super().__init__(title="Lid Control")
-        # WMClass so the Ubuntu dock matches the .desktop launcher.
-        # Deprecated in GTK3 but functional on X11; harmless on Wayland.
+        super().__init__(title=_("Lid Control"))
         try:
-            self.set_wmclass("lid-control", "lid-control")
+            self.set_wmclass(APP_ID, APP_ID)
         except Exception:
             pass
 
-        self.set_default_size(560, -1)
+        self.set_default_size(580, -1)
         self.set_resizable(False)
         self.set_position(Gtk.WindowPosition.CENTER)
         self.set_border_width(0)
@@ -78,10 +201,50 @@ class LidControlWindow(Gtk.Window):
             except Exception:
                 pass
 
+        # ----- Header bar with hamburger menu --------------------------------
+        header = Gtk.HeaderBar()
+        header.set_show_close_button(True)
+        header.props.title = _("Lid Control")
+        self.set_titlebar(header)
+
+        menu_btn = Gtk.MenuButton()
+        menu_btn.set_image(Gtk.Image.new_from_icon_name(
+            "open-menu-symbolic", Gtk.IconSize.BUTTON
+        ))
+        menu_btn.set_tooltip_text(_("Menu"))
+        menu = Gtk.Menu()
+
+        # Language submenu
+        lang_item = Gtk.MenuItem(label=_("Language"))
+        lang_submenu = Gtk.Menu()
+        current_lang = _read_user_lang()
+        first_radio = None
+        for code, label in SUPPORTED_LANGS:
+            display = _("System default") if code == "auto" else label
+            radio = Gtk.RadioMenuItem.new_with_label_from_widget(
+                first_radio, display
+            )
+            if first_radio is None:
+                first_radio = radio
+            radio.set_active(code == current_lang)
+            radio.connect("activate", self._on_lang_chosen, code)
+            lang_submenu.append(radio)
+        lang_item.set_submenu(lang_submenu)
+        menu.append(lang_item)
+        menu.append(Gtk.SeparatorMenuItem())
+
+        about_item = Gtk.MenuItem(label=_("About Lid Control"))
+        about_item.connect("activate", self._on_about)
+        menu.append(about_item)
+        menu.show_all()
+        menu_btn.set_popup(menu)
+        header.pack_end(menu_btn)
+
+        # ----- Body ----------------------------------------------------------
         current = read_current()
         self._suppress_mirror = False
-        self.scenario_groups = {}   # key -> {action: Gtk.RadioButton}
-        self.scenario_frames = {}   # key -> Gtk.Frame
+        self.scenario_groups = {}
+        self.scenario_frames = {}
 
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         outer.set_margin_top(16)
@@ -90,17 +253,19 @@ class LidControlWindow(Gtk.Window):
         outer.set_margin_end(16)
         self.add(outer)
 
-        header = Gtk.Label()
-        header.set_markup("<b>What should happen when the lid is closed?</b>")
-        header.set_xalign(0)
-        outer.pack_start(header, False, False, 0)
+        head_lbl = Gtk.Label()
+        head_lbl.set_markup(
+            f"<b>{_('What should happen when the lid is closed?')}</b>"
+        )
+        head_lbl.set_xalign(0)
+        outer.pack_start(head_lbl, False, False, 0)
 
         self.apply_all_check = Gtk.CheckButton(
-            label="Use the same action for all scenarios"
+            label=_("Use the same action for all scenarios")
         )
         outer.pack_start(self.apply_all_check, False, False, 0)
 
-        for key, label in SCENARIOS:
+        for key, label in scenarios():
             frame = Gtk.Frame(label=f" {label} ")
             box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
             box.set_margin_top(8)
@@ -113,7 +278,7 @@ class LidControlWindow(Gtk.Window):
             group = {}
             first_radio = None
             current_action = current.get(key, DEFAULT_ACTION)
-            for action, label_short in ACTIONS:
+            for action, label_short in actions():
                 radio = Gtk.RadioButton.new_with_label_from_widget(
                     first_radio, label_short
                 )
@@ -126,27 +291,27 @@ class LidControlWindow(Gtk.Window):
             self.scenario_groups[key] = group
             self.scenario_frames[key] = frame
 
-        # Checkbox starts checked if all three current values agree.
-        all_equal = len({current[k] for k, _ in SCENARIOS}) == 1
+        all_equal = len({current[k] for k, _l in scenarios()}) == 1
         self.apply_all_check.set_active(all_equal)
         self.apply_all_check.connect("toggled", self._on_apply_all_toggled)
         self._sync_locked_state()
 
-        # Buttons
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         btn_box.set_halign(Gtk.Align.END)
         btn_box.set_margin_top(4)
 
-        cancel_btn = Gtk.Button(label="Cancel")
+        cancel_btn = Gtk.Button(label=_("Cancel"))
         cancel_btn.connect("clicked", lambda *_: self.close())
         btn_box.pack_start(cancel_btn, False, False, 0)
 
-        save_btn = Gtk.Button(label="Save")
+        save_btn = Gtk.Button(label=_("Save"))
         save_btn.get_style_context().add_class("suggested-action")
         save_btn.connect("clicked", self._on_save)
         btn_box.pack_start(save_btn, False, False, 0)
 
         outer.pack_start(btn_box, False, False, 0)
+
+    # --- helpers ----------------------------------------------------------
 
     def _selected_action(self, key):
         for action, radio in self.scenario_groups[key].items():
@@ -159,47 +324,47 @@ class LidControlWindow(Gtk.Window):
         if not target.get_active():
             target.set_active(True)
 
+    def _primary_key(self):
+        return scenarios()[0][0]
+
+    # --- callbacks --------------------------------------------------------
+
     def _on_radio_toggled(self, radio, key, action):
         if self._suppress_mirror or not radio.get_active():
             return
         if not self.apply_all_check.get_active():
             return
-        if key != SCENARIOS[0][0]:
+        if key != self._primary_key():
             return
-        # Mirror the primary scenario to the other two.
         self._suppress_mirror = True
         try:
-            for other_key, _ in SCENARIOS[1:]:
+            for other_key, _l in scenarios()[1:]:
                 self._set_group_action(other_key, action)
         finally:
             self._suppress_mirror = False
 
-    def _on_apply_all_toggled(self, *_):
+    def _on_apply_all_toggled(self, *_a):
         self._sync_locked_state()
         if self.apply_all_check.get_active():
-            primary = self._selected_action(SCENARIOS[0][0])
+            primary = self._selected_action(self._primary_key())
             self._suppress_mirror = True
             try:
-                for other_key, _ in SCENARIOS[1:]:
+                for other_key, _l in scenarios()[1:]:
                     self._set_group_action(other_key, primary)
             finally:
                 self._suppress_mirror = False
 
     def _sync_locked_state(self):
         locked = self.apply_all_check.get_active()
-        for other_key, _ in SCENARIOS[1:]:
+        for other_key, _l in scenarios()[1:]:
             self.scenario_frames[other_key].set_sensitive(not locked)
 
-    def _on_save(self, *_):
-        values = {key: self._selected_action(key) for key, _ in SCENARIOS}
+    def _on_save(self, *_a):
+        values = {key: self._selected_action(key) for key, _l in scenarios()}
         battery = values["HandleLidSwitch"]
         ac      = values["HandleLidSwitchExternalPower"]
         docked  = values["HandleLidSwitchDocked"]
 
-        # The privileged helper is allowed to run without a password thanks
-        # to the polkit policy at
-        # /usr/share/polkit-1/actions/org.kbrianps.lid-control.policy
-        # (allow_active=yes for the active local session).
         try:
             subprocess.run(
                 ["pkexec", HELPER_PATH, battery, ac, docked],
@@ -207,19 +372,63 @@ class LidControlWindow(Gtk.Window):
             )
         except subprocess.CalledProcessError:
             self._show_error(
-                "Could not save the setting",
-                "The privileged helper returned an error. Try running "
-                f"`{HELPER_PATH}` manually as root to see what went wrong.",
+                _("Could not save the setting"),
+                _("The privileged helper returned an error. Try running "
+                  "`{path}` manually as root to see what went wrong.").format(
+                    path=HELPER_PATH
+                ),
             )
             return
         except FileNotFoundError:
             self._show_error(
-                "pkexec not found",
-                "Install policykit-1 (or polkit) to allow privileged writes.",
+                _("pkexec not found"),
+                _("Install policykit-1 (or polkit) to allow privileged writes."),
             )
             return
 
         self.close()
+
+    def _on_lang_chosen(self, item, code):
+        if not item.get_active():
+            return
+        if code == _read_user_lang():
+            return
+        try:
+            _write_user_lang(code)
+        except Exception as exc:
+            self._show_error(_("Could not save language"), str(exc))
+            return
+        dlg = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text=_("Language updated"),
+        )
+        dlg.format_secondary_text(
+            _("The new language will be used the next time you open Lid Control.")
+        )
+        dlg.run()
+        dlg.destroy()
+
+    def _on_about(self, *_a):
+        about = Gtk.AboutDialog(transient_for=self, modal=True)
+        about.set_program_name(_("Lid Control"))
+        about.set_version(APP_VERSION)
+        about.set_comments(
+            _("Configure what happens when the laptop lid is closed.")
+        )
+        about.set_website(APP_WEBSITE)
+        about.set_website_label("GitHub")
+        about.set_license_type(Gtk.License.GPL_3_0)
+        if os.path.isfile(ICON_PATH):
+            try:
+                pix = GdkPixbuf.Pixbuf.new_from_file_at_size(ICON_PATH, 96, 96)
+                about.set_logo(pix)
+            except Exception:
+                pass
+        about.run()
+        about.destroy()
 
     def _show_error(self, primary, secondary):
         dialog = Gtk.MessageDialog(
@@ -233,6 +442,10 @@ class LidControlWindow(Gtk.Window):
         dialog.run()
         dialog.destroy()
 
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 def main():
     win = LidControlWindow()
