@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+<policyconfig>
+
+  <vendor>Lid Control</vendor>
+  <vendor_url>https://github.com/kbrianps/lid-control</vendor_url>
+  <icon_name>lid-control</icon_name>
+
+  <action id="org.kbrianps.lid-control.apply">
+    <description>Change what happens when the laptop lid is closed</description>
+    <message>Authentication is required to change the lid-close action</message>
+    <defaults>
+      <allow_any>auth_admin</allow_any>
+      <allow_inactive>auth_admin</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/libexec/lid-control-apply</annotate>
+  </action>
+
+</policyconfig>
